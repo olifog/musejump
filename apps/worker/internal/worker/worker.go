@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"log"
+	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -34,9 +36,13 @@ type User struct {
 	ID            string // Clerk user ID
 	Email         string
 	State         UserState // idle or active
+	lastProgress  int
+	lastTrackId   string
 	heartbeat     *time.Ticker
+	jumpTask      *time.Ticker
 	cancel        context.CancelFunc
 	SpotifyClient *spotify.Client
+	mu            sync.RWMutex // Per-user mutex
 }
 
 // Worker handles the main worker functionality
@@ -149,17 +155,23 @@ func (w *Worker) syncUsers() error {
 			u = &User{
 				ID:    clerkUser.ID,
 				State: StateIdle,
+				mu:    sync.RWMutex{}, // Initialize the mutex
 			}
 			w.users[clerkUser.ID] = u
 			log.Printf("Added new user: %s", clerkUser.ID)
 		}
+
+		// Lock the specific user for updates
+		u.mu.Lock()
 
 		// Update user metadata from Clerk
 		if len(clerkUser.EmailAddresses) > 0 {
 			u.Email = clerkUser.EmailAddresses[0].EmailAddress
 		}
 
+		// Skip Spotify client creation if already exists
 		if u.SpotifyClient != nil {
+			u.mu.Unlock()
 			continue
 		}
 
@@ -169,6 +181,8 @@ func (w *Worker) syncUsers() error {
 		})
 		if err != nil {
 			log.Printf("Error listing OAuth access tokens for user %s: %v", clerkUser.ID, err)
+			u.mu.Unlock()
+			continue
 		}
 
 		if len(accessTokens.OAuthAccessTokens) != 1 {
@@ -176,19 +190,23 @@ func (w *Worker) syncUsers() error {
 		}
 
 		// If the user has a Spotify token, set up their client
-		accessToken := accessTokens.OAuthAccessTokens[0].Token
+		if len(accessTokens.OAuthAccessTokens) > 0 {
+			accessToken := accessTokens.OAuthAccessTokens[0].Token
 
-		token := &oauth2.Token{
-			AccessToken: accessToken,
+			token := &oauth2.Token{
+				AccessToken: accessToken,
+			}
+
+			// Create HTTP client with token
+			httpClient := oauth2.NewClient(w.ctx, oauth2.StaticTokenSource(token))
+
+			// Create Spotify client
+			u.SpotifyClient = spotify.New(httpClient)
+
+			log.Printf("Created Spotify client for user %s", clerkUser.ID)
 		}
 
-		// Create HTTP client with token
-		httpClient := oauth2.NewClient(w.ctx, oauth2.StaticTokenSource(token))
-
-		// Create Spotify client
-		u.SpotifyClient = spotify.New(httpClient)
-
-		log.Printf("Created Spotify client for user %s", clerkUser.ID)
+		u.mu.Unlock()
 	}
 
 	w.usersMux.Unlock()
@@ -200,8 +218,8 @@ func (w *Worker) syncUsers() error {
 // GetUser returns a user by ID
 func (w *Worker) GetUser(id string) (*User, bool) {
 	w.usersMux.RLock()
-	defer w.usersMux.RUnlock()
 	user, exists := w.users[id]
+	w.usersMux.RUnlock()
 	return user, exists
 }
 
@@ -257,6 +275,10 @@ func (w *Worker) startHeartbeatsForNewUsers() {
 
 // startUserHeartbeat starts the heartbeat for a single user
 func (w *Worker) startUserHeartbeat(u *User) {
+	// Lock the specific user
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
 	// Create a context for this heartbeat that can be cancelled
 	ctx, cancel := context.WithCancel(w.ctx)
 	u.cancel = cancel
@@ -289,11 +311,13 @@ func (w *Worker) startUserHeartbeat(u *User) {
 
 // checkUserStatus checks the current status of a user and updates the state
 func (w *Worker) checkUserStatus(u *User) error {
-	// Lock for user state updates
-	isPlaying := w.isUserPlaying(u.ID)
+	// Get the current playing status before locking user
+	playback := w.getCurrentPlayback(u.ID)
+	isPlaying := playback != nil && playback.Playing
 
-	w.usersMux.Lock()
-	defer w.usersMux.Unlock()
+	// Lock only the specific user
+	u.mu.Lock()
+	defer u.mu.Unlock()
 
 	if isPlaying && u.State == StateIdle {
 		// User started playing music, switch to active
@@ -309,6 +333,8 @@ func (w *Worker) checkUserStatus(u *User) error {
 	} else if !isPlaying && u.State == StateActive {
 		// User stopped playing music, switch to idle
 		u.State = StateIdle
+		u.lastTrackId = ""
+		u.lastProgress = 0
 		log.Printf("User %s changed from active to idle", u.ID)
 
 		// Update the heartbeat interval
@@ -318,30 +344,179 @@ func (w *Worker) checkUserStatus(u *User) error {
 		u.heartbeat = time.NewTicker(w.cfg.IdleHeartbeat)
 	}
 
+	if isPlaying {
+		progressDelta := (int)(playback.Progress) - u.lastProgress
+		deltaDifference := math.Abs(float64(w.cfg.ActiveHeartbeat.Milliseconds()) - float64(progressDelta))
+		if u.lastTrackId == playback.Item.ID.String() && deltaDifference < 100.0 {
+			log.Printf("checkUserStatus: No change for user %s", u.ID)
+			u.lastProgress = (int)(playback.Progress)
+			u.lastTrackId = playback.Item.ID.String()
+			return nil
+		}
+
+		// if something HAS changed, kill the current scheduled jump task
+		if u.jumpTask != nil {
+			u.jumpTask.Stop()
+		}
+
+		// fetch jump data from db. could be multiple rows, get the trigger times sorted
+		rows, err := w.db.Query(
+			`SELECT "trigger"
+				FROM "user_song_jumps"
+				WHERE "userId" = $1
+				AND "songId" = $2
+				ORDER BY "trigger" ASC`,
+			u.ID,
+			playback.Item.ID.String(),
+		)
+		if err != nil {
+			log.Printf("Error fetching jump data for user %s: %v", u.ID, err)
+			return err
+		}
+
+		var triggers []int
+		for rows.Next() {
+			var trigger int
+			err = rows.Scan(&trigger)
+			if err != nil {
+				log.Printf("Error scanning jump data for user %s: %v", u.ID, err)
+				return err
+			}
+			triggers = append(triggers, trigger)
+		}
+
+		if len(triggers) == 0 {
+			log.Printf("No jump data found for user %s on track %s", u.ID, playback.Item.ID.String())
+			u.lastProgress = (int)(playback.Progress)
+			u.lastTrackId = playback.Item.ID.String()
+			return nil
+		}
+
+		sort.Ints(triggers)
+
+		triggerIndex := 0
+		for {
+			nextTrigger := triggers[triggerIndex]
+			if (int)(playback.Progress) < nextTrigger {
+				break
+			}
+			triggerIndex++
+			if triggerIndex >= len(triggers) {
+				return nil
+			}
+		}
+
+		// schedule a new jump task for trigger time minus 1 second
+		delayTime := triggers[triggerIndex] - (int)(playback.Progress) - 1000
+		u.jumpTask = time.NewTicker(time.Duration(delayTime) * time.Millisecond)
+		u.lastProgress = (int)(playback.Progress)
+		u.lastTrackId = playback.Item.ID.String()
+		// Start the jump task handler
+		w.startUserJumpTask(u, playback.Item.ID.String(), triggers[triggerIndex])
+	}
+
 	return nil
 }
 
-// isUserPlaying is a placeholder function that would check if a user is currently playing music
-// In a real implementation, this would call the Spotify API
-func (w *Worker) isUserPlaying(userID string) bool {
+// startUserJumpTask starts a goroutine to handle jump tasks for a user
+func (w *Worker) startUserJumpTask(u *User, trackID string, triggerTime int) {
+	// Capture these values to use in the goroutine
+	userID := u.ID
+	jumpTask := u.jumpTask
+	ctx := w.ctx
+
+	// Start the jump task goroutine
+	go func() {
+		for {
+			select {
+			case <-jumpTask.C:
+				// Here we would implement the logic to handle the jump
+				// when the timer fires, approximately 1 second before the trigger time
+				log.Printf("Jump task triggered for user %s on track %s at trigger time %d",
+					userID, trackID, triggerTime)
+
+				// TODO: Implement the actual jump handling logic
+				// This is where you would put your implementation
+
+				startTime := time.Now()
+
+				rows, err := w.db.Query(
+					`SELECT "target"
+						FROM "user_song_jumps"
+						WHERE "userId" = $1
+						AND "songId" = $2
+						AND "trigger" = $3`,
+					userID,
+					trackID,
+					triggerTime,
+				)
+				if err != nil {
+					log.Printf("Error fetching jump data for user %s: %v", userID, err)
+					return
+				}
+
+				// there should be only one row
+				if !rows.Next() {
+					log.Printf("No jump data found for user %s on track %s at trigger time %d",
+						userID, trackID, triggerTime)
+					return
+				}
+
+				var target int
+				err = rows.Scan(&target)
+				if err != nil {
+					log.Printf("Error scanning jump data for user %s: %v", userID, err)
+					return
+				}
+
+				duration := time.Since(startTime)
+				log.Printf("DB lookup took %s to complete", duration)
+
+				// sleep for 1 second - duration
+				time.Sleep(time.Second - duration)
+
+				u.SpotifyClient.Seek(ctx, target)
+				// u.lastProgress = target
+
+				// Stop the ticker after it's fired once
+				jumpTask.Stop()
+				return
+
+			case <-ctx.Done():
+				// Stop if the context is cancelled
+				jumpTask.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// isUserPlaying checks if a user is currently playing music via Spotify API
+func (w *Worker) getCurrentPlayback(userID string) *spotify.CurrentlyPlaying {
+	// Get the user with read lock
 	w.usersMux.RLock()
 	u, exists := w.users[userID]
 	w.usersMux.RUnlock()
 
 	if !exists || u.SpotifyClient == nil {
 		log.Printf("User %s does not have a Spotify client", userID)
-		return false
+		return nil
 	}
 
+	// Use read lock for the specific user when accessing SpotifyClient
+	u.mu.RLock()
+	client := u.SpotifyClient
+	u.mu.RUnlock()
+
 	// Get the user's currently playing track
-	playback, err := u.SpotifyClient.PlayerCurrentlyPlaying(w.ctx)
+	playback, err := client.PlayerCurrentlyPlaying(w.ctx)
 	if err != nil {
 		log.Printf("Error getting currently playing track for user %s: %v", userID, err)
-		return false
+		return nil
 	}
 
 	log.Printf("User %s is playing: %v", userID, playback)
 
 	// Check if playback is currently active
-	return playback != nil && playback.Playing
+	return playback
 }
