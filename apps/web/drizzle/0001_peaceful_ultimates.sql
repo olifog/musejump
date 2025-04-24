@@ -1,0 +1,1 @@
+ALTER TABLE "user_song_jumps" ALTER COLUMN "id" SET DATA TYPE text;
