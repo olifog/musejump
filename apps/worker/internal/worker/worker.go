@@ -408,6 +408,9 @@ func (w *Worker) checkUserStatus(u *User) error {
 
 		// schedule a new jump task for trigger time minus 1 second
 		delayTime := triggers[triggerIndex] - (int)(playback.Progress) - 1000
+		if delayTime < 0 {
+			delayTime = 100
+		}
 		u.jumpTask = time.NewTicker(time.Duration(delayTime) * time.Millisecond)
 		u.lastProgress = (int)(playback.Progress)
 		u.lastTrackId = playback.Item.ID.String()
@@ -475,7 +478,10 @@ func (w *Worker) startUserJumpTask(u *User, trackID string, triggerTime int) {
 				// sleep for 1 second - duration
 				time.Sleep(time.Second - duration)
 
-				u.SpotifyClient.Seek(ctx, target)
+				err = u.SpotifyClient.Seek(ctx, target)
+				if err != nil {
+					log.Printf("Error seeking to target %d for user %s: %v", target, userID, err)
+				}
 				// u.lastProgress = target
 
 				// Stop the ticker after it's fired once
