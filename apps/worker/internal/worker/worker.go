@@ -347,10 +347,21 @@ func (w *Worker) checkUserStatus(u *User) error {
 	if isPlaying {
 		progressDelta := (int)(playback.Progress) - u.lastProgress
 		deltaDifference := math.Abs(float64(w.cfg.ActiveHeartbeat.Milliseconds()) - float64(progressDelta))
-		if u.lastTrackId == playback.Item.ID.String() && deltaDifference < 100.0 {
+
+		// Add explicit nil check for playback.Item
+		trackIdString := ""
+		if playback.Item != nil {
+			trackIdString = playback.Item.ID.String()
+		} else {
+			log.Printf("Warning: playback.Item is nil for user %s", u.ID)
+			u.lastProgress = (int)(playback.Progress)
+			return nil
+		}
+
+		if u.lastTrackId == trackIdString && deltaDifference < 100.0 {
 			log.Printf("checkUserStatus: No change for user %s", u.ID)
 			u.lastProgress = (int)(playback.Progress)
-			u.lastTrackId = playback.Item.ID.String()
+			u.lastTrackId = trackIdString
 			return nil
 		}
 
@@ -367,7 +378,7 @@ func (w *Worker) checkUserStatus(u *User) error {
 				AND "songId" = $2
 				ORDER BY "trigger" ASC`,
 			u.ID,
-			playback.Item.ID.String(),
+			trackIdString,
 		)
 		if err != nil {
 			log.Printf("Error fetching jump data for user %s: %v", u.ID, err)
@@ -386,9 +397,9 @@ func (w *Worker) checkUserStatus(u *User) error {
 		}
 
 		if len(triggers) == 0 {
-			log.Printf("No jump data found for user %s on track %s", u.ID, playback.Item.ID.String())
+			log.Printf("No jump data found for user %s on track %s", u.ID, trackIdString)
 			u.lastProgress = (int)(playback.Progress)
-			u.lastTrackId = playback.Item.ID.String()
+			u.lastTrackId = trackIdString
 			return nil
 		}
 
@@ -413,9 +424,9 @@ func (w *Worker) checkUserStatus(u *User) error {
 		}
 		u.jumpTask = time.NewTicker(time.Duration(delayTime) * time.Millisecond)
 		u.lastProgress = (int)(playback.Progress)
-		u.lastTrackId = playback.Item.ID.String()
+		u.lastTrackId = trackIdString
 		// Start the jump task handler
-		w.startUserJumpTask(u, playback.Item.ID.String(), triggers[triggerIndex])
+		w.startUserJumpTask(u, trackIdString, triggers[triggerIndex])
 	}
 
 	return nil
