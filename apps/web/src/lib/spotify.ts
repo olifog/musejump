@@ -2,7 +2,13 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { env } from "@/env";
 import { SpotifyApi, type AccessToken } from "@spotify/web-api-ts-sdk";
 
+const spotifyApiCache = new Map<string, SpotifyApi>();
+
 export async function getSpotifyApi(userId: string) {
+  if (spotifyApiCache.has(userId)) {
+    return spotifyApiCache.get(userId)!;
+  }
+
   const clerk = await clerkClient();
   const tokenResponse = await clerk.users.getUserOauthAccessToken(
     userId,
@@ -24,6 +30,9 @@ export async function getSpotifyApi(userId: string) {
     env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!,
     accessToken,
   );
+
+  // Store in cache
+  spotifyApiCache.set(userId, spotifyApi);
 
   return spotifyApi;
 }

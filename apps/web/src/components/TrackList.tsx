@@ -5,7 +5,6 @@ interface TrackListProps<T extends Track> {
   tracks: T[];
   showIndex?: boolean;
   renderRightElement?: (track: T, index: number) => React.ReactNode;
-  onTrackClick?: (track: T) => void;
   emptyMessage?: string;
 }
 
@@ -13,7 +12,6 @@ export const TrackList = <T extends Track>({
   tracks,
   showIndex = false,
   renderRightElement,
-  onTrackClick,
   emptyMessage = "No tracks found",
 }: TrackListProps<T>) => {
   if (tracks.length === 0) {
@@ -30,7 +28,6 @@ export const TrackList = <T extends Track>({
           rightElement={
             renderRightElement ? renderRightElement(track, index) : undefined
           }
-          onClick={() => onTrackClick && onTrackClick(track)}
         />
       ))}
     </div>

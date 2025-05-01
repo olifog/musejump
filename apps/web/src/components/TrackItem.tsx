@@ -4,21 +4,21 @@ import Image from "next/image";
 import { Track } from "@spotify/web-api-ts-sdk";
 import { useTRPC } from "@/trpc/client";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 interface TrackItemProps {
   track: Track;
   index?: number;
   rightElement?: React.ReactNode;
-  onClick?: () => void;
 }
 
 export const TrackItem = ({
   track,
   index,
   rightElement,
-  onClick,
 }: TrackItemProps) => {
   const trpc = useTRPC();
+  const router = useRouter();
   
   const { data: jumps } = useQuery(
     trpc.jumps.getJumps.queryOptions({
@@ -26,10 +26,14 @@ export const TrackItem = ({
     })
   )
 
+  const handleClick = () => {
+    router.push(`/track/${track.id}`);
+  };
+
   return (
     <div
       className="flex items-center gap-2 p-2 hover:bg-gray-700 rounded-lg transition cursor-pointer"
-      onClick={onClick}
+      onClick={handleClick}
     >
       {index !== undefined && (
         <div className="w-5 text-center text-xs text-gray-400">{index + 1}</div>

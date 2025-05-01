@@ -3,7 +3,6 @@ import { PlayHistory, Track } from "@spotify/web-api-ts-sdk";
 
 interface RecentlyPlayedSectionProps {
   tracks: PlayHistory[];
-  onTrackClick?: (track: Track) => void;
 }
 
 export interface TrackWithPlayedAt extends Track {
@@ -12,7 +11,6 @@ export interface TrackWithPlayedAt extends Track {
 
 export const RecentlyPlayedSection = ({
   tracks,
-  onTrackClick,
 }: RecentlyPlayedSectionProps) => {
   const renderRightElement = (track: TrackWithPlayedAt) => (
     <span className="text-xs text-gray-400">
@@ -39,7 +37,6 @@ export const RecentlyPlayedSection = ({
             })) as TrackWithPlayedAt[]
           }
           renderRightElement={renderRightElement}
-          onTrackClick={onTrackClick}
           emptyMessage="No recently played tracks found."
         />
       </div>

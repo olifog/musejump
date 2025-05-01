@@ -8,12 +8,10 @@ import { Skeleton } from "./ui/skeleton";
 
 interface SearchSectionProps {
   onSearch: (query: string) => Promise<Track[]>;
-  onTrackClick?: (track: Track) => void;
 }
 
 export const SearchSection = ({
   onSearch,
-  onTrackClick,
 }: SearchSectionProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<Track[]>([]);
@@ -58,7 +56,6 @@ export const SearchSection = ({
         <div className="mt-4 max-h-[40vh] overflow-y-auto">
           <TrackList
             tracks={results}
-            onTrackClick={onTrackClick}
             emptyMessage="No tracks found. Try a different search."
           />
         </div>

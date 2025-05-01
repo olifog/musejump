@@ -3,10 +3,9 @@ import { Track } from "@spotify/web-api-ts-sdk";
 
 interface TopTracksProps {
   tracks: Track[];
-  onTrackClick?: (track: Track) => void;
 }
 
-export const TopTracksSection = ({ tracks, onTrackClick }: TopTracksProps) => {
+export const TopTracksSection = ({ tracks }: TopTracksProps) => {
   const renderRightElement = (track: Track) => (
     <span className="text-xs text-gray-400">
       {Math.floor(track.duration_ms / 60000)}:
@@ -24,7 +23,6 @@ export const TopTracksSection = ({ tracks, onTrackClick }: TopTracksProps) => {
           tracks={tracks}
           showIndex={true}
           renderRightElement={renderRightElement}
-          onTrackClick={onTrackClick}
           emptyMessage="No top tracks found."
         />
       </div>
