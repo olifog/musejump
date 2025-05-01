@@ -181,7 +181,7 @@ export const TrackDetails = ({ track }: TrackDetailsProps) => {
         <ArrowLeft size={24} />
       </Button>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mt-12 md:mt-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mt-16 md:mt-8">
         {/* Left Column: Track Info & Cover */}
         <div className="md:col-span-1 flex flex-col items-center md:items-start">
            {track.album.images && track.album.images[0]?.url && (
