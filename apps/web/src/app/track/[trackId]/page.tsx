@@ -5,7 +5,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
 type Props = {
-  params: { trackId: string };
+  params: Promise<{ trackId: string }>  ;
 };
 
 export async function generateMetadata(
@@ -21,7 +21,7 @@ export async function generateMetadata(
     }
 
     const spotify = await getSpotifyApi(user.id);
-    const track = await spotify.tracks.get(params.trackId);
+    const track = await spotify.tracks.get((await params).trackId);
     
     return {
       title: `${track.name} - ${track.artists[0]?.name || "Unknown Artist"}`,
@@ -43,7 +43,7 @@ export default async function TrackPage({ params }: Props) {
   }
   
   const spotify = await getSpotifyApi(user.id);
-  const track = await spotify.tracks.get(params.trackId);
+  const track = await spotify.tracks.get((await params).trackId);
   
   return <TrackDetails track={track} />;
 }

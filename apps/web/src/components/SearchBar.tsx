@@ -1,5 +1,7 @@
-import { Search } from "lucide-react";
+import { Search, X, Loader2 } from "lucide-react";
 import { useState, useRef, FormEvent } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
@@ -30,30 +32,36 @@ export const SearchBar = ({
   return (
     <form className="relative w-full" onSubmit={handleSubmit}>
       <div className="relative flex items-center">
-        <div className="absolute left-3 text-gray-400">
-          <Search size={18} />
-        </div>
-        <input
+        <Search
+          size={18}
+          className="absolute left-3 text-muted-foreground pointer-events-none"
+        />
+        <Input
           ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={placeholder}
-          className="w-full bg-gray-700 rounded-lg py-2 pl-10 pr-4 text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="w-full pl-10 pr-10"
+          disabled={isLoading}
         />
         {query && !isLoading && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={handleClear}
-            className="absolute right-3 text-gray-400 hover:text-white"
+            className="absolute right-2 h-7 w-7 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
           >
-            ×
-          </button>
+            <X size={16} />
+          </Button>
         )}
         {isLoading && (
-          <div className="absolute right-3">
-            <div className="h-4 w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
-          </div>
+          <Loader2
+            size={18}
+            className="absolute right-3 animate-spin text-muted-foreground"
+          />
         )}
       </div>
     </form>

@@ -1,5 +1,12 @@
 import { TrackList } from "./TrackList";
 import { Track } from "@spotify/web-api-ts-sdk";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface TopTracksProps {
   tracks: Track[];
@@ -7,25 +14,29 @@ interface TopTracksProps {
 
 export const TopTracksSection = ({ tracks }: TopTracksProps) => {
   const renderRightElement = (track: Track) => (
-    <span className="text-xs text-gray-400">
+    <span className="text-xs text-muted-foreground">
       {Math.floor(track.duration_ms / 60000)}:
       {String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, "0")}
     </span>
   );
 
   return (
-    <div className="bg-gray-800 rounded-lg p-3">
-      <h2 className="text-sm uppercase tracking-wider text-gray-400 font-bold mb-2">
-        Top Tracks
-      </h2>
-      <div className="overflow-y-auto max-h-[70vh]">
-        <TrackList
-          tracks={tracks}
-          showIndex={true}
-          renderRightElement={renderRightElement}
-          emptyMessage="No top tracks found."
-        />
-      </div>
-    </div>
+    <Card>
+      <CardHeader className="p-3 pb-2">
+        <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground font-bold">
+          Top Tracks
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0 pl-3 pr-3 pb-3">
+        <ScrollArea className="h-[70vh] pr-2">
+          <TrackList
+            tracks={tracks}
+            showIndex={true}
+            renderRightElement={renderRightElement}
+            emptyMessage="No top tracks found."
+          />
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 };

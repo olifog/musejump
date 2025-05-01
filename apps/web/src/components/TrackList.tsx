@@ -15,7 +15,7 @@ export const TrackList = <T extends Track>({
   emptyMessage = "No tracks found",
 }: TrackListProps<T>) => {
   if (tracks.length === 0) {
-    return <div className="text-center py-8 text-gray-400">{emptyMessage}</div>;
+    return <div className="text-center py-8 text-muted-foreground">{emptyMessage}</div>;
   }
 
   return (

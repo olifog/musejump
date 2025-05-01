@@ -32,11 +32,11 @@ export const TrackItem = ({
 
   return (
     <div
-      className="flex items-center gap-2 p-2 hover:bg-gray-700 rounded-lg transition cursor-pointer"
+      className="flex items-center gap-2 p-2 hover:bg-accent rounded-lg transition cursor-pointer"
       onClick={handleClick}
     >
       {index !== undefined && (
-        <div className="w-5 text-center text-xs text-gray-400">{index + 1}</div>
+        <div className="w-5 text-center text-xs text-muted-foreground">{index + 1}</div>
       )}
 
       {track.album.images && track.album.images[0]?.url && (
@@ -52,13 +52,13 @@ export const TrackItem = ({
 
       <div className="min-w-0 flex-1">
         <p className="font-medium truncate">{track.name}</p>
-        <p className="text-gray-400 text-sm truncate">
+        <p className="text-muted-foreground text-sm truncate">
           {track.artists.map((artist) => artist.name).join(", ")}
         </p>
       </div>
 
       {jumps && jumps.length > 0 && (
-        <div className="text-white text-xs rounded-full bg-green-600 w-6 h-6 flex items-center justify-center">
+        <div className="text-primary-foreground text-xs rounded-full bg-primary w-6 h-6 flex items-center justify-center">
           {jumps.length}
         </div>
       )}

@@ -15,6 +15,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface TrackDetailsProps {
   track: Track;
@@ -38,11 +40,22 @@ const parseTime = (timeStr: string): number => {
   return (minutes * 60 + seconds) * 1000;
 };
 
-const jumpSchema = z.object({
+// Base schema including duration for validation context
+const jumpSchema = (durationMs: number) => z.object({
   trigger: z.string().regex(/^\d+:\d+(\.\d)?$/, "Must be in format M:SS.S"),
   target: z.string().regex(/^\d+:\d+(\.\d)?$/, "Must be in format M:SS.S"),
   description: z.string().optional(),
+}).refine(data => parseTime(data.trigger) < durationMs, {
+  message: "Trigger time must be less than track duration",
+  path: ["trigger"],
+}).refine(data => parseTime(data.target) < durationMs, {
+  message: "Target time must be less than track duration",
+  path: ["target"],
 });
+
+// Infer the type from the schema *factory*
+// We need a concrete duration to infer, 0 is arbitrary but works for type inference
+type JumpFormData = z.infer<ReturnType<typeof jumpSchema>>;
 
 export const TrackDetails = ({ track }: TrackDetailsProps) => {
   const [editingJump, setEditingJump] = useState<string | null>(null);
@@ -81,8 +94,16 @@ export const TrackDetails = ({ track }: TrackDetailsProps) => {
     })
   );
 
-  const newJumpForm = useForm<z.infer<typeof jumpSchema>>({
-    resolver: zodResolver(jumpSchema),
+  // Format duration for display only
+  const minutes = Math.floor(track.duration_ms / 60000);
+  const seconds = Math.floor((track.duration_ms % 60000) / 1000);
+  const formattedDuration = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+
+  // Create the specific resolver using the track's duration
+  const resolver = zodResolver(jumpSchema(track.duration_ms));
+
+  const newJumpForm = useForm<JumpFormData>({
+    resolver,
     defaultValues: {
       trigger: "0:00.0",
       target: "0:00.0",
@@ -90,8 +111,8 @@ export const TrackDetails = ({ track }: TrackDetailsProps) => {
     },
   });
 
-  const editJumpForm = useForm<z.infer<typeof jumpSchema>>({
-    resolver: zodResolver(jumpSchema),
+  const editJumpForm = useForm<JumpFormData>({
+    resolver,
     defaultValues: {
       trigger: "0:00.0",
       target: "0:00.0",
@@ -108,7 +129,7 @@ export const TrackDetails = ({ track }: TrackDetailsProps) => {
         description: "",
       });
     }
-  }, [isAddingJump, newJumpForm]);
+  }, [isAddingJump, newJumpForm.reset]);
 
   // Set form values when editing
   useEffect(() => {
@@ -122,14 +143,9 @@ export const TrackDetails = ({ track }: TrackDetailsProps) => {
         });
       }
     }
-  }, [editingJump, jumps, editJumpForm]);
+  }, [editingJump, jumps, editJumpForm.reset]);
 
-  // Format duration
-  const minutes = Math.floor(track.duration_ms / 60000);
-  const seconds = Math.floor((track.duration_ms % 60000) / 1000);
-  const formattedDuration = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-
-  const onAddJump = (data: z.infer<typeof jumpSchema>) => {
+  const onAddJump = (data: JumpFormData) => {
     addJumpMutation.mutate({
       songId: track.id,
       trigger: parseTime(data.trigger),
@@ -138,7 +154,7 @@ export const TrackDetails = ({ track }: TrackDetailsProps) => {
     });
   };
 
-  const onUpdateJump = (data: z.infer<typeof jumpSchema>) => {
+  const onUpdateJump = (data: JumpFormData) => {
     if (!editingJump) return;
     
     updateJumpMutation.mutate({
@@ -154,242 +170,259 @@ export const TrackDetails = ({ track }: TrackDetailsProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4">
-      <div className="max-w-md mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Track Details</h1>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => router.back()}
-            className="text-gray-400 hover:text-white"
-          >
-            <ArrowLeft size={24} />
-          </Button>
-        </div>
+    <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
+      {/* Back Button - Top Left */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => router.back()}
+        className="absolute top-4 left-4 text-muted-foreground hover:text-foreground z-10"
+      >
+        <ArrowLeft size={24} />
+      </Button>
 
-        <div className="flex flex-col items-center">
-          {track.album.images && track.album.images[0]?.url && (
-            <div className="relative w-48 h-48 mb-4">
-              <Image
-                src={track.album.images[0].url}
-                alt={track.name}
-                fill
-                className="object-cover rounded-lg shadow-lg"
-              />
-            </div>
-          )}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mt-12 md:mt-0">
+        {/* Left Column: Track Info & Cover */}
+        <div className="md:col-span-1 flex flex-col items-center md:items-start">
+           {track.album.images && track.album.images[0]?.url && (
+            <div className="w-full max-w-sm md:max-w-full mb-6">
+               <AspectRatio ratio={1 / 1} className="bg-muted rounded-lg overflow-hidden shadow-lg">
+                 <Image
+                   src={track.album.images[0].url}
+                   alt={track.name}
+                   fill
+                   className="object-cover"
+                   priority
+                 />
+               </AspectRatio>
+             </div>
+           )}
 
-          <h2 className="text-xl font-bold text-center mb-1">{track.name}</h2>
-          <p className="text-gray-400 text-center mb-4">
+          <h1 className="text-3xl font-bold text-center md:text-left mb-2 leading-tight">{track.name}</h1>
+          <p className="text-xl text-muted-foreground text-center md:text-left mb-4">
             {track.artists.map((artist) => artist.name).join(", ")}
           </p>
 
-          <div className="grid grid-cols-2 gap-4 w-full mb-4">
-            <div className="bg-gray-700 p-2 rounded text-center">
-              <p className="text-xs text-gray-400">Album</p>
-              <p className="truncate">{track.album.name}</p>
-            </div>
-            <div className="bg-gray-700 p-2 rounded text-center">
-              <p className="text-xs text-gray-400">Duration</p>
-              <p>{formattedDuration}</p>
-            </div>
-          </div>
+          <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-6">
+             <span>{track.album.name}</span>
+             <span>•</span>
+             <span>{formattedDuration}</span>
+           </div>
 
-          <Link href={track.external_urls.spotify} target="_blank">
-            <button className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-full transition mb-6">
+
+          <Link href={track.external_urls.spotify} target="_blank" rel="noopener noreferrer" className="w-full md:w-auto">
+            <Button className="w-full md:w-auto">
               Play on Spotify
-            </button>
+            </Button>
           </Link>
+        </div>
 
-          {/* Song Jumps Section */}
-          <div className="w-full border-t border-gray-700 pt-6 mt-2">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Song Jumps</h3>
-              {!isAddingJump && (
-                <Button 
-                  variant="default" 
-                  size="sm" 
-                  onClick={() => setIsAddingJump(true)}
-                  className="text-xs"
-                >
-                  <Plus size={14} className="mr-1" /> Add Jump
-                </Button>
-              )}
-            </div>
+        {/* Right Column: Song Jumps */}
+        <div className="md:col-span-2">
+          <Card>
+             <CardHeader>
+               <div className="flex justify-between items-center">
+                 <CardTitle className="text-2xl">Song Jumps</CardTitle>
+                 {!isAddingJump && (
+                   <Button
+                     variant="default"
+                     size="sm"
+                     onClick={() => setIsAddingJump(true)}
+                   >
+                     <Plus size={16} className="mr-1" /> Add Jump
+                   </Button>
+                 )}
+               </div>
+             </CardHeader>
+             <CardContent>
+               {isAddingJump && (
+                 <Card className="mb-6 bg-secondary border-none">
+                   <CardHeader>
+                      <CardTitle className="text-lg font-medium">New Jump</CardTitle>
+                   </CardHeader>
+                   <CardContent>
+                     <Form {...newJumpForm}>
+                       <form onSubmit={newJumpForm.handleSubmit(onAddJump)} className="space-y-4">
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <FormField
+                             control={newJumpForm.control}
+                             name="trigger"
+                             render={({ field }) => (
+                               <FormItem>
+                                 <FormLabel>Trigger (M:SS.S)</FormLabel>
+                                 <FormControl>
+                                   <Input {...field} placeholder="0:00.0" />
+                                 </FormControl>
+                                 <FormMessage />
+                               </FormItem>
+                             )}
+                           />
+                           <FormField
+                             control={newJumpForm.control}
+                             name="target"
+                             render={({ field }) => (
+                               <FormItem>
+                                 <FormLabel>Target (M:SS.S)</FormLabel>
+                                 <FormControl>
+                                   <Input {...field} placeholder="0:00.0" />
+                                 </FormControl>
+                                 <FormMessage />
+                               </FormItem>
+                             )}
+                           />
+                         </div>
+                         <FormField
+                           control={newJumpForm.control}
+                           name="description"
+                           render={({ field }) => (
+                             <FormItem>
+                               <FormLabel>Description (Optional)</FormLabel>
+                               <FormControl>
+                                 <Input {...field} placeholder="e.g., Skip intro" />
+                               </FormControl>
+                               <FormMessage />
+                             </FormItem>
+                           )}
+                         />
+                         <div className="flex justify-end gap-2">
+                           <Button
+                             type="button"
+                             variant="ghost"
+                             size="sm"
+                             onClick={() => setIsAddingJump(false)}
+                           >
+                             Cancel
+                           </Button>
+                           <Button type="submit" size="sm" disabled={addJumpMutation.isPending}>
+                             {addJumpMutation.isPending ? "Saving..." : "Save Jump"}
+                           </Button>
+                         </div>
+                       </form>
+                     </Form>
+                   </CardContent>
+                 </Card>
+               )}
 
-            {isAddingJump && (
-              <div className="mb-4 bg-gray-700 p-3 rounded-md">
-                <h4 className="text-sm font-medium mb-2">New Jump</h4>
-                <Form {...newJumpForm}>
-                  <form onSubmit={newJumpForm.handleSubmit(onAddJump)} className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField
-                        control={newJumpForm.control}
-                        name="trigger"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Trigger (M:SS.S)</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="0:00.0" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={newJumpForm.control}
-                        name="target"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Target (M:SS.S)</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="0:00.0" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <FormField
-                      control={newJumpForm.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Description</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Description (optional)" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button 
-                        type="button" 
-                        variant="secondary" 
-                        size="sm" 
-                        onClick={() => setIsAddingJump(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" size="sm">Save</Button>
-                    </div>
-                  </form>
-                </Form>
-              </div>
-            )}
-
-            {jumps && jumps.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[80px]">Trigger</TableHead>
-                    <TableHead className="w-[80px]">Target</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="w-[80px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jumps.map((jump) => (
-                    <TableRow key={jump.id}>
-                      {editingJump === jump.id ? (
-                        <TableCell colSpan={4}>
-                          <Form {...editJumpForm}>
-                            <form onSubmit={editJumpForm.handleSubmit(onUpdateJump)} className="space-y-3">
-                              <div className="grid grid-cols-2 gap-3">
-                                <FormField
-                                  control={editJumpForm.control}
-                                  name="trigger"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs">Trigger (M:SS.S)</FormLabel>
-                                      <FormControl>
-                                        <Input {...field} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={editJumpForm.control}
-                                  name="target"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs">Target (M:SS.S)</FormLabel>
-                                      <FormControl>
-                                        <Input {...field} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-                              <FormField
-                                control={editJumpForm.control}
-                                name="description"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs">Description</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  type="button" 
-                                  variant="outline" 
-                                  size="sm" 
-                                  onClick={() => setEditingJump(null)}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button type="submit" size="sm">Update</Button>
-                              </div>
-                            </form>
-                          </Form>
-                        </TableCell>
-                      ) : (
-                        <>
-                          <TableCell>{formatTime(jump.trigger)}</TableCell>
-                          <TableCell>{formatTime(jump.target)}</TableCell>
-                          <TableCell>{jump.description || '-'}</TableCell>
-                          <TableCell>
-                            <div className="flex space-x-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => setEditingJump(jump.id)}
-                                className="h-7 w-7"
-                              >
-                                <Edit size={14} />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => onDeleteJump(jump.id)}
-                                className="h-7 w-7 text-red-500 hover:text-red-400"
-                              >
-                                <Trash size={14} />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </>
-                      )}
+              {jumps && jumps.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[100px]">Trigger</TableHead>
+                      <TableHead className="w-[100px]">Target</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="w-[100px] text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <p>No jumps configured for this track.</p>
-                <p className="text-sm mt-1">Add a jump to skip or repeat sections.</p>
-              </div>
-            )}
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {jumps.map((jump) => (
+                      <TableRow key={jump.id} className={editingJump === jump.id ? "bg-muted/50" : ""}>
+                        {editingJump === jump.id ? (
+                          <TableCell colSpan={4} className="p-0">
+                             <div className="p-4">
+                             <Form {...editJumpForm}>
+                               <form onSubmit={editJumpForm.handleSubmit(onUpdateJump)} className="space-y-4">
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                   <FormField
+                                     control={editJumpForm.control}
+                                     name="trigger"
+                                     render={({ field }) => (
+                                       <FormItem>
+                                         <FormLabel>Trigger (M:SS.S)</FormLabel>
+                                         <FormControl>
+                                           <Input {...field} />
+                                         </FormControl>
+                                         <FormMessage />
+                                       </FormItem>
+                                     )}
+                                   />
+                                   <FormField
+                                     control={editJumpForm.control}
+                                     name="target"
+                                     render={({ field }) => (
+                                       <FormItem>
+                                         <FormLabel>Target (M:SS.S)</FormLabel>
+                                         <FormControl>
+                                           <Input {...field} />
+                                         </FormControl>
+                                         <FormMessage />
+                                       </FormItem>
+                                     )}
+                                   />
+                                 </div>
+                                 <FormField
+                                   control={editJumpForm.control}
+                                   name="description"
+                                   render={({ field }) => (
+                                     <FormItem>
+                                       <FormLabel>Description (Optional)</FormLabel>
+                                       <FormControl>
+                                         <Input {...field} />
+                                       </FormControl>
+                                       <FormMessage />
+                                     </FormItem>
+                                   )}
+                                 />
+                                 <div className="flex justify-end gap-2">
+                                   <Button
+                                     type="button"
+                                     variant="ghost"
+                                     size="sm"
+                                     onClick={() => setEditingJump(null)}
+                                   >
+                                     Cancel
+                                   </Button>
+                                   <Button type="submit" size="sm" disabled={updateJumpMutation.isPending}>
+                                     {updateJumpMutation.isPending ? "Updating..." : "Update Jump"}
+                                   </Button>
+                                 </div>
+                               </form>
+                             </Form>
+                             </div>
+                          </TableCell>
+                        ) : (
+                          <>
+                            <TableCell className="font-mono">{formatTime(jump.trigger)}</TableCell>
+                            <TableCell className="font-mono">{formatTime(jump.target)}</TableCell>
+                            <TableCell>{jump.description || <span className="text-muted-foreground">-</span>}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end space-x-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setEditingJump(jump.id)}
+                                  className="h-8 w-8"
+                                >
+                                  <Edit size={16} />
+                                  <span className="sr-only">Edit Jump</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => onDeleteJump(jump.id)}
+                                  disabled={deleteJumpMutation.isPending && deleteJumpMutation.variables?.id === jump.id}
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  <Trash size={16} />
+                                  <span className="sr-only">Delete Jump</span>
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                 !isAddingJump && (
+                   <div className="text-center py-12 text-muted-foreground">
+                     <p>No jumps configured for this track.</p>
+                     <p className="text-sm mt-1">Click "Add Jump" to create one.</p>
+                   </div>
+                 )
+              )}
+             </CardContent>
+           </Card>
         </div>
       </div>
     </div>

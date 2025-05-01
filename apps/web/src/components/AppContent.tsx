@@ -20,7 +20,7 @@ export const AppContent = ({
   onSearch,
 }: AppContentProps) => {
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4">
+    <div className="min-h-screen bg-background text-foreground p-4">
       <UserHeader user={user} />
 
       <SearchSection onSearch={onSearch} />

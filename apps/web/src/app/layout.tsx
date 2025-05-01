@@ -3,6 +3,8 @@ import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { TRPCReactProvider } from "@/trpc/client";
 import { dark } from "@clerk/themes";
+import { ThemeProvider } from "@/components/theme-provider";
+
 export const metadata: Metadata = {
   title: "musejump",
   description: "skip and loop the good bits",
@@ -16,8 +18,17 @@ export default function RootLayout({
   return (
     <ClerkProvider appearance={{ baseTheme: dark }}>
       <TRPCReactProvider>
-        <html lang="en">
-          <body className="bg-gray-900">{children}</body>
+        <html suppressHydrationWarning lang="en">
+          <body>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              
+            >
+              {children}
+            </ThemeProvider>
+          </body>
         </html>
       </TRPCReactProvider>
     </ClerkProvider>

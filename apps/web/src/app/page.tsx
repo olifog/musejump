@@ -1,6 +1,7 @@
 import { SignInButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 export default async function Home() {
   const { userId } = await auth();
@@ -9,12 +10,12 @@ export default async function Home() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen">
-      <h1 className="text-4xl font-bold text-white">musejump</h1>
-      <p className="text-lg text-white">skip and loop the good bits</p>
-      <div className="mt-4 px-4 py-2 bg-white rounded-md">
+    <div className="flex flex-col items-center justify-center min-h-screen">
+      <h1 className="text-4xl font-bold text-foreground">musejump</h1>
+      <p className="text-lg text-foreground">skip and loop the good bits</p>
+      <Button asChild className="mt-4">
         <SignInButton mode="modal" />
-      </div>
+      </Button>
     </div>
   );
 }
