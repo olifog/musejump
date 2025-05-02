@@ -169,10 +169,14 @@ func (w *Worker) syncUsers() error {
 			u.Email = clerkUser.EmailAddresses[0].EmailAddress
 		}
 
-		// Skip Spotify client creation if already exists
-		if u.SpotifyClient != nil {
-			u.mu.Unlock()
-			continue
+		// Skip Spotify client creation if already exists and isn't expired
+		client := u.SpotifyClient
+		if client != nil {
+			token, err := client.Token()
+			if err != nil && token != nil && token.Expiry.After(time.Now()) {
+				u.mu.Unlock()
+				continue
+			}
 		}
 
 		accessTokens, err := user.ListOAuthAccessTokens(w.ctx, &user.ListOAuthAccessTokensParams{

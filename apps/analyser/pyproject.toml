@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "allin1>=1.1.0",
     "fastapi[standard]>=0.115.12",
+    "lyricsgenius>=3.6.2",
     "madmom",
     "natten==0.14.6",
     "openai>=1.76.2",
