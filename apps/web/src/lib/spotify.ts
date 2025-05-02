@@ -9,7 +9,7 @@ export async function getSpotifyApi(userId: string) {
 		const spotifyApi = spotifyApiCache.get(userId);
 		if (spotifyApi) {
 			const accessToken = await spotifyApi.getAccessToken();
-			if (accessToken?.expires_in && accessToken.expires_in < 1000) {
+			if (!accessToken?.expires_in || accessToken.expires_in < 1000) {
 				spotifyApiCache.delete(userId);
 			} else {
 				return spotifyApi;
