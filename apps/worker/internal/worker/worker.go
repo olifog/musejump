@@ -173,7 +173,7 @@ func (w *Worker) syncUsers() error {
 		client := u.SpotifyClient
 		if client != nil {
 			token, err := client.Token()
-			if err != nil && token != nil && token.Expiry.After(time.Now()) {
+			if err == nil && token != nil && token.Expiry.After(time.Now()) {
 				u.mu.Unlock()
 				continue
 			}
@@ -199,6 +199,7 @@ func (w *Worker) syncUsers() error {
 
 			token := &oauth2.Token{
 				AccessToken: accessToken,
+				Expiry:      time.Now().Add(time.Minute * 10),
 			}
 
 			// Create HTTP client with token

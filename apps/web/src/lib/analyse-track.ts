@@ -10,6 +10,11 @@ export const analyseTrack = async (track: Track) => {
 
 	const response = await fetch(
 		`${env.NEXT_PUBLIC_ANALYSER_URL}/analyse?search=${search}`,
+		{
+			headers: {
+				"ngrok-skip-browser-warning": "69420",
+			},
+		}
 	);
 	const data = (await response.json()) as {
 		video_id: string;
