@@ -1,0 +1,18 @@
+[project]
+name = "analyser"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "allin1>=1.1.0",
+    "fastapi[standard]>=0.115.12",
+    "madmom",
+    "natten==0.14.6",
+    "openai>=1.76.2",
+    "youtube-search>=2.1.2",
+    "yt-dlp[default]>=2025.4.30",
+]
+
+[tool.uv.sources]
+madmom = { git = "https://github.com/CPJKU/madmom" }

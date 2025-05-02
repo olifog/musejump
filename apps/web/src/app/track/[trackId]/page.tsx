@@ -44,6 +44,8 @@ export default async function TrackPage({ params }: Props) {
   
   const spotify = await getSpotifyApi(user.id);
   const track = await spotify.tracks.get((await params).trackId);
+  // const trackAnalysis = await spotify.tracks.audioFeatures(track.id);
+  // console.log(trackAnalysis);
   
   return <TrackDetails track={track} />;
 }
